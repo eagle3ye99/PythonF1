@@ -5,16 +5,14 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 import numpy as np
 
-# Como obtener cualquier clave de sesión de acuerdo a país, tipo de sesión y año (Revisar de ingresar por teclado correctamente)
+# Como obtener cualquier clave de sesión de acuerdo a país, tipo de sesión y año (Escalable a cualquier carrera si se añade ingresar por teclado)
 print("Getting session key for specific country, session type, and year")
-country = "Australia"
+country = "Monaco"  # Se puede cambiar a cualquier país que tenga carreras de F1
 session = "Race"
 year = 2025
-
 url = f"https://api.openf1.org/v1/sessions?country_name={country}&session_name={session}&year={year}"
 initial_response = urlopen(url)
 data = json.loads(initial_response.read().decode('utf-8'))
-
 
 if data:
     session_key = data[0]['session_key']
@@ -22,23 +20,23 @@ if data:
 else:
     print("No session found for the given parameters.")
 
-# Get all drivers data for the latest session
-print("\nGetting drivers data for latest session")
-response = urlopen(f'https://api.openf1.org/v1/drivers?session_key={session_key}') #https://api.openf1.org/v1/sessions?country_name=Belgium&session_name=Sprint&year=2023
-drivers_data = json.loads(response.read().decode('utf-8'))
-print("Raw drivers JSON data:")
-print(drivers_data)
-
 # Get session information for the latest session to get race location
 print("\nGetting session information for latest session")
 session_response = urlopen(f'https://api.openf1.org/v1/sessions?session_key={session_key}')
 session_data = json.loads(session_response.read().decode('utf-8'))
 race_location = session_data[0]['location'] if session_data else "Unknown"
-print(f"Race location: {race_location}")
+print(f"Race location: {race_location}") #Revisar si es repetitivo con el bloque que averigua la session_key a partir de país, tipo de sesión y año
+
+# Get all drivers data for the latest session
+print("\nGetting drivers data for latest session")
+response = urlopen(f'https://api.openf1.org/v1/drivers?session_key={session_key}') 
+drivers_data = json.loads(response.read().decode('utf-8'))
+print("Raw drivers JSON data:") #opcional debug print?
+print(drivers_data)
 
 # Create DataFrame from drivers data and remove unwanted fields
 drivers_df = pd.DataFrame(drivers_data)
-fields_to_remove = ['headshot_url', 'team_colour', 'first_name', 'last_name', 'broadcast_name']
+fields_to_remove = ['headshot_url', 'first_name', 'last_name', 'broadcast_name', 'country_code'] #Dejo 'team_colour' para usarlo en el gráfico
 for field in fields_to_remove:
     if field in drivers_df.columns:
         drivers_df = drivers_df.drop(field, axis=1)
@@ -93,11 +91,18 @@ for driver in drivers_data:
                 'final_position': final_position['position'],
                 'date': final_position['date']
             })
+            # Si este piloto terminó primero, el número de vueltas que relizó es el total de vueltas de la carrera
+            if final_position['position'] == 1:
+                lap_response = urlopen(f'https://api.openf1.org/v1/laps?session_key={session_key}&driver_number={driver_number}')
+                lap_data = json.loads(lap_response.read().decode('utf-8'))
+                num_laps = len(lap_data)
         else:
             print(f"No position data for driver {driver_number}")
             
     except Exception as e:
         print(f"Error getting position for driver {driver_number}: {e}")
+
+print(f"Número de vueltas de la carrera: {num_laps}")
 
 # Create DataFrame from positions data
 positions_df = pd.DataFrame(all_positions_data)
@@ -105,8 +110,10 @@ positions_df = pd.DataFrame(all_positions_data)
 if not positions_df.empty and 'date' in positions_df.columns:
     positions_df['date'] = pd.to_datetime(positions_df['date'], format='ISO8601').dt.strftime('%Y-%m-%d %H:%M:%S')
 print(f"\nPositions DataFrame:")
-if not positions_df.empty:
+if not positions_df.empty: #Revisa si hay datos de posiciones
     print(positions_df)
+    if 'final_position' in positions_df.columns:
+        print(f"Total drivers with position data: {len(positions_df['driver_number'].unique())}")
 else:
     print("No position data available")
 
@@ -194,6 +201,11 @@ if not laps_df.empty:
     
     # Crear gráfico simple de velocidades por vuelta con promedio cada 5 vueltas
     print("\nCreating simple speed vs lap visualization (5-lap averages)")
+
+    # Asegura que todos los colores tengan el prefijo '#' para evitar problemas de formato a la hora de graficar
+    merged_df['team_colour'] = merged_df['team_colour'].apply(
+        lambda x: f'#{x}' if pd.notna(x) and not str(x).startswith('#') else x
+    )
     
     # Filtrar datos válidos
     speed_data = merged_df[merged_df['st_speed'].notna() & merged_df['lap_number'].notna()]
@@ -204,6 +216,7 @@ if not laps_df.empty:
         # Incluir TODOS los pilotos
         for piloto in speed_data['full_name'].unique():
             datos_piloto = speed_data[speed_data['full_name'] == piloto].copy()
+            color_equipo = datos_piloto['team_colour'].iloc[0]  # Color del equipo adecado al piloto
             
             # Crear grupos de 5 vueltas
             datos_piloto['lap_group'] = ((datos_piloto['lap_number'] - 1) // 5) * 5 + 1
@@ -215,8 +228,15 @@ if not laps_df.empty:
             if len(speed_avg) > 0:
                 # Usar solo el apellido para la leyenda
                 apellido = piloto.split()[-1]
-                plt.plot(speed_avg['lap_group'], speed_avg['st_speed'], 
-                        marker='o', label=apellido, markersize=4, linewidth=1.5)
+                plt.plot(
+                    speed_avg['lap_group'],
+                    speed_avg['st_speed'], 
+                    marker='o',
+                    label=apellido,
+                    markersize=4,
+                    linewidth=1.3,
+                    color=color_equipo  # Usar color del equipo
+                )
         
         plt.xlabel("Vuelta (inicio de grupo de 5)")
         plt.ylabel("Velocidad promedio (km/h)")
