@@ -4,12 +4,13 @@ import pandas as pd
 from datetime import datetime
 import matplotlib.pyplot as plt
 import numpy as np
+import time
 
 # Como obtener cualquier clave de sesión de acuerdo a país, tipo de sesión y año (Escalable a cualquier carrera si se añade ingresar por teclado)
 print("Getting session key for specific country, session type, and year")
-country = "Monaco"  # Se puede cambiar a cualquier país que tenga carreras de F1
+country = "Singapore"  # Se puede cambiar a cualquier país que tenga carreras de F1
 session = "Race"
-year = 2025
+year = 2023
 url = f"https://api.openf1.org/v1/sessions?country_name={country}&session_name={session}&year={year}"
 initial_response = urlopen(url)
 data = json.loads(initial_response.read().decode('utf-8'))
@@ -102,6 +103,8 @@ for driver in drivers_data:
     except Exception as e:
         print(f"Error getting position for driver {driver_number}: {e}")
 
+    time.sleep(0.5)  # Espera medio segundo entre solicitudes
+
 print(f"Número de vueltas de la carrera: {num_laps}")
 
 # Create DataFrame from positions data
@@ -162,7 +165,7 @@ if not laps_df.empty:
     # Show some statistics
     print(f"\nSummary:")
     print(f"Race location: {race_location}")
-    print(f"Session: Latest")
+    print(f"Session: {session}")
     print(f"Total drivers: {len(drivers_df)}")
     print(f"Total laps: {len(laps_df)}")
     print(f"Drivers with lap data: {laps_df['driver_number'].nunique()}")
