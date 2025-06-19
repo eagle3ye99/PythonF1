@@ -288,7 +288,7 @@ if sessions_data:
         )
         plt.xlabel("Diferencia respecto al más rápido (s)")
         plt.ylabel("Piloto")
-        plt.title("Vuelta más rápida de cada piloto (referencia: más rápido = 0)")
+        plt.title("Vuelta más rápida de cada piloto (referencia: más rápido = 0.0 s)")
         plt.gca().invert_yaxis()  # El más rápido arriba
         plt.tight_layout()
         plt.grid(axis='x', linestyle='--', alpha=0.5)
