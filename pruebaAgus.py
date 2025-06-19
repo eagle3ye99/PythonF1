@@ -6,28 +6,28 @@ import matplotlib.pyplot as plt
 import numpy as np
 import time
 
-countries_df = pd.read_csv('countries.csv')  # Asegurarse de que este archivo esté en el mismo directorio
-# Get unique countries
-countries = sorted(countries_df['Country'].dropna().unique())
+circuits_df = pd.read_csv('Circuits.csv')  # Asegurarse de que este archivo esté en el mismo directorio
+print(circuits_df.columns)
 # Defino los años (arbitrary, 2023-2025, the API contains data for these years)
 years = [2023, 2024, 2025]
 # Defino los tipos de sesión (arbitrary, the API contains data for these types)
 session_types = ['Practice', 'Qualifying', 'Race', 'Sprint']
 
 # Generar una lista numerada de países
-print("Available countries:")
-for i, Country in enumerate(countries, 1):
-    print(f"{i}. {Country}")
+print("Available circuits:")
+for i, circuit in enumerate(circuits_df['Circuit'], 1):
+    print(f"{i}. {circuit}")
 
 # Pedir al usuario hasta que elija un país válido
 while True:
     try:
-        country_choice = int(input("Select a country by number: ")) - 1
-        if 0 <= country_choice < len(countries):
-            selected_country = countries[country_choice]
+        circuit_choice = int(input("Select a country by number: ")) - 1
+        if 0 <= circuit_choice < len(circuits_df):
+            selected_circuit_legible = circuits_df.iloc[circuit_choice]['Circuit']
+            selected_circuit_url = circuits_df.iloc[circuit_choice]['circuit_for_URL']
             break
         else:
-            print("Invalid choice. Enter a number between 1 and", len(countries))
+            print("Invalid choice. Enter a number between 1 and", len(circuits_df))
     except ValueError:
         print("Please enter a valid number.")
 
@@ -47,7 +47,6 @@ while True:
     except ValueError:
         print("Please enter a valid number.")
 
-print(f"\nSelected country: {selected_country}, Year: {selected_year}")
 
 print("\nAvailable session types:")
 for i, session_type in enumerate(session_types, 1):
@@ -65,9 +64,9 @@ while True:
     except ValueError:
         print("Please enter a valid number.")
 
-print(f"\nSelected country: {selected_country}, Year: {selected_year}, Session type: {selected_session}")
+print(f"\nSelected Circuit: {selected_circuit_legible}, Year: {selected_year}, Session type: {selected_session}")
 print(f"\nGetting session key for selected country, session type, and year")
-url = f"https://api.openf1.org/v1/sessions?country_name={selected_country}&session_name={selected_session}&year={selected_year}"
+url = f"https://api.openf1.org/v1/sessions?circuit_short_name={selected_circuit_url}&session_name={selected_session}&year={selected_year}"
 initial_response = urlopen(url)
 sessions_data = json.loads(initial_response.read().decode('utf-8'))
 
@@ -265,21 +264,26 @@ if sessions_data:
         # Filtrar datos válidos
         speed_data = merged_df[merged_df['st_speed'].notna() & merged_df['lap_number'].notna()]
         
-        if not speed_data.empty:
+        # Filtrar solo los 10 primeros por posición final
+        top10_drivers = (
+            speed_data[['driver_number', 'full_name', 'final_position']]
+            .drop_duplicates(subset=['driver_number'])
+            .sort_values('final_position')
+            .head(10)['full_name']
+            .tolist()
+        )
+        speed_data_top10 = speed_data[speed_data['full_name'].isin(top10_drivers)]
+
+        if not speed_data_top10.empty:
             plt.figure(figsize=(12, 6))
             
-            # Incluir TODOS los pilotos
-            for piloto in speed_data['full_name'].unique():
-                datos_piloto = speed_data[speed_data['full_name'] == piloto].copy()
-                color_equipo = datos_piloto['team_colour'].iloc[0]  # Color del equipo adecado al piloto
+            for piloto in top10_drivers:
+                datos_piloto = speed_data_top10[speed_data_top10['full_name'] == piloto].copy()
+                color_equipo = datos_piloto['team_colour'].iloc[0]
                 
-                # Crear grupos de 5 vueltas
                 datos_piloto['lap_group'] = ((datos_piloto['lap_number'] - 1) // 5) * 5 + 1
-                
-                # Calcular promedio de velocidad por grupo de 5 vueltas
                 speed_avg = datos_piloto.groupby('lap_group')['st_speed'].mean().reset_index()
                 
-                # Solo mostrar si tiene datos suficientes
                 if len(speed_avg) > 0:
                     # Usar solo el apellido para la leyenda
                     apellido = piloto.split()[-1]
@@ -290,7 +294,7 @@ if sessions_data:
                         label=apellido,
                         markersize=4,
                         linewidth=1.3,
-                        color=color_equipo  # Usar color del equipo
+                        color=color_equipo
                     )
             
             plt.xlabel("Vuelta (inicio de grupo de 5)")
@@ -300,7 +304,6 @@ if sessions_data:
             plt.grid(True)
             plt.tight_layout()
             
-            # Guardar gráfico
             filename = f'f1_speed_5lap_avg_{race_location.replace(" ", "_")}.png'
             plt.savefig(filename, dpi=300, bbox_inches='tight')
             plt.show()
